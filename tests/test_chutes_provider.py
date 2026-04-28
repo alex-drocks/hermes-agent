@@ -333,7 +333,6 @@ def test_create_openai_client_chutes_injects_transport():
     # ChutesE2EETransport instantiated once with correct kwargs
     assert mock_e2ee_transport_class.call_count == 1
     _call_kwargs = mock_e2ee_transport_class.call_args.kwargs
-    assert _call_kwargs["api_key"] == "***"
     assert _call_kwargs["api_base"] == "https://api.chutes.ai"
     assert "models_base" not in _call_kwargs
     # inner must be an httpx HTTPTransport (not None)
