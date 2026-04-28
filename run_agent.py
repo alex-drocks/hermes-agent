@@ -5093,11 +5093,11 @@ class AIAgent:
                     "Install with: pip install hermes-agent[chutes]"
                 ) from _e
 
+            # Build an inner HTTPTransport with the same TCP keepalive
+            # socket options Hermes uses everywhere else.
             import httpx as _httpx
             import socket as _socket
 
-            # Build an inner HTTPTransport with the same TCP keepalive
-            # socket options Hermes uses everywhere else.
             _sock_opts = [(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)]
             if hasattr(_socket, "TCP_KEEPIDLE"):
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPIDLE, 30))
@@ -5111,7 +5111,6 @@ class AIAgent:
             _e2ee_transport = _ChutesE2EETransport(
                 api_key=_api_key,
                 api_base="https://api.chutes.ai",
-                models_base="https://llm.chutes.ai",
                 inner=_inner_transport,
             )
             _e2ee_http = _httpx.Client(

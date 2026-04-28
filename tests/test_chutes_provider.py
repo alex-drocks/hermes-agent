@@ -69,36 +69,109 @@ def test_chutes_static_models():
 
 
 def test_fetch_chutes_models_live(monkeypatch):
+    """Live endpoint returns only TEE / confidential_compute=True models."""
+    import json as _json
+
     from hermes_cli.models import fetch_chutes_models
 
     monkeypatch.setenv("CHUTES_API_KEY", "cpk_test")
-    live_ids = ["moonshotai/Kimi-K2.6-TEE", "zai-org/GLM-5.1-TEE"]
-    with patch("hermes_cli.models.fetch_api_models", return_value=live_ids):
+
+    payload = {
+        "object": "list",
+        "data": [
+            {"id": "moonshotai/Kimi-K2.6-TEE", "confidential_compute": True},
+            {"id": "zai-org/GLM-5.1-TEE", "confidential_compute": True},
+            {"id": "deepseek-ai/DeepSeek-V3", "confidential_compute": False},
+            {"id": "Qwen/Qwen3-32B", "confidential_compute": False},
+            {"id": "unsloth/gemma-3-27b-it"},  # missing field => False
+        ],
+    }
+
+    fake_resp = MagicMock()
+    fake_resp.read.return_value = _json.dumps(payload).encode()
+    fake_cm = MagicMock()
+    fake_cm.__enter__ = MagicMock(return_value=fake_resp)
+    fake_cm.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=fake_cm):
         result = fetch_chutes_models()
+
     assert result is not None
-    assert result[: len(live_ids)] == live_ids
-    # Routing aliases appended as conveniences
+    assert "moonshotai/Kimi-K2.6-TEE" in result
+    assert "zai-org/GLM-5.1-TEE" in result
+    # Non-TEE models must be excluded
+    assert "deepseek-ai/DeepSeek-V3" not in result
+    assert "Qwen/Qwen3-32B" not in result
+    assert "unsloth/gemma-3-27b-it" not in result
+    # Routing aliases still appended
     for alias in ("default", "default:latency", "default:throughput"):
         assert alias in result
 
 
+def test_fetch_chutes_models_filters_non_tee():
+    """Only models with ``confidential_compute=True`` survive filtering."""
+    import json as _json
+
+    from hermes_cli.models import fetch_chutes_models
+
+    payload = {
+        "data": [
+            {"id": "a/TEE-Model", "confidential_compute": True},
+            {"id": "b/NonTEE-Model", "confidential_compute": False},
+            {"id": "c/MissingField"},
+            {"id": "", "confidential_compute": True},  # blank id skipped
+            {"confidential_compute": True},  # no id skipped
+        ],
+    }
+
+    fake_resp = MagicMock()
+    fake_resp.read.return_value = _json.dumps(payload).encode()
+    fake_cm = MagicMock()
+    fake_cm.__enter__ = MagicMock(return_value=fake_resp)
+    fake_cm.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=fake_cm):
+        result = fetch_chutes_models()
+
+    assert result is not None
+    assert result[0] == "a/TEE-Model"
+    assert "b/NonTEE-Model" not in result
+    assert "c/MissingField" not in result
+
+
 def test_fetch_chutes_models_failure_falls_back(monkeypatch):
+    """When the endpoint is unreachable, return ``None`` (caller falls back)."""
     from hermes_cli.models import fetch_chutes_models
 
     monkeypatch.setenv("CHUTES_API_KEY", "cpk_test")
-    with patch("hermes_cli.models.fetch_api_models", return_value=None):
+    with patch("urllib.request.urlopen", side_effect=Exception("network down")):
         result = fetch_chutes_models()
     assert result is None
 
 
 def test_provider_model_ids_wires_to_fetch_chutes(monkeypatch):
+    """``provider_model_ids('chutes')`` routes to ``fetch_chutes_models``."""
+    import json as _json
+
     from hermes_cli.models import provider_model_ids
 
     monkeypatch.setenv("CHUTES_API_KEY", "cpk_test")
-    live_ids = ["deepseek-ai/DeepSeek-V3.2-TEE"]
-    with patch("hermes_cli.models.fetch_api_models", return_value=live_ids):
+    payload = {
+        "data": [
+            {"id": "deepseek-ai/DeepSeek-V3.2-TEE", "confidential_compute": True},
+        ],
+    }
+
+    fake_resp = MagicMock()
+    fake_resp.read.return_value = _json.dumps(payload).encode()
+    fake_cm = MagicMock()
+    fake_cm.__enter__ = MagicMock(return_value=fake_resp)
+    fake_cm.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=fake_cm):
         result = provider_model_ids("chutes")
-    assert live_ids[0] in result
+
+    assert "deepseek-ai/DeepSeek-V3.2-TEE" in result
     for alias in ("default", "default:latency", "default:throughput"):
         assert alias in result
 
@@ -222,7 +295,7 @@ def test_create_openai_client_chutes_import_error():
     with patch.dict(sys.modules, {"chutes_e2ee": None}):
         with pytest.raises(RuntimeError, match="chutes-e2ee"):
             agent._create_openai_client(
-                {"api_key": "***", "base_url": "https://llm.chutes.ai/v1"},
+                {"api_key": "cpk_test", "base_url": "https://llm.chutes.ai/v1"},
                 reason="test",
                 shared=False,
             )
@@ -262,6 +335,6 @@ def test_create_openai_client_chutes_injects_transport():
     _call_kwargs = mock_e2ee_transport_class.call_args.kwargs
     assert _call_kwargs["api_key"] == "cpk_test"
     assert _call_kwargs["api_base"] == "https://api.chutes.ai"
-    assert _call_kwargs["models_base"] == "https://llm.chutes.ai"
+    assert "models_base" not in _call_kwargs
     # inner must be an httpx HTTPTransport (not None)
     assert _call_kwargs["inner"] is not None

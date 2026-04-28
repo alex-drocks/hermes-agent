@@ -2591,24 +2591,44 @@ def fetch_chutes_models(
 ) -> Optional[list[str]]:
     """Fetch the live Chutes catalog from ``https://llm.chutes.ai/v1/models``.
 
-    The live Chutes endpoint is the source of truth for Chutes model inventory
-    (models.dev does not track Chutes). Returns live IDs plus routing aliases
-    on success, or ``None`` when the endpoint is unreachable (callers should
-    fall back to the static routing-alias trio).
+    Only returns **TEE / Confidential-Compute** models (``confidential_compute=True``).
+    TEE models are the only ones that benefit from transparent E2EE transport.
+    Non-TEE chutes are hidden from the TUI because they would fail or silently
+    downgrade without hardware-based attestation.
+
+    Returns live IDs plus routing aliases on success, or ``None`` when the
+    endpoint is unreachable (callers should fall back to the static trio).
     """
+    import json as _json
+    import urllib.request
+
     if not api_key:
         api_key = os.getenv("CHUTES_API_KEY", "").strip()
     if not base_url:
         base_url = CHUTES_BASE_URL
 
-    live = fetch_api_models(api_key, base_url, timeout=timeout)
-    if not live:
+    url = base_url.rstrip("/") + "/models"
+    headers: dict[str, str] = {"User-Agent": _HERMES_USER_AGENT}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read().decode())
+    except Exception:
         return None
+
+    tee_ids = [
+        m.get("id", "")
+        for m in data.get("data", [])
+        if m.get("id") and m.get("confidential_compute") is True
+    ]
 
     seen: set[str] = set()
     merged: list[str] = []
-    for model_id in live:
-        if model_id and model_id not in seen:
+    for model_id in tee_ids:
+        if model_id not in seen:
             seen.add(model_id)
             merged.append(model_id)
     for alias in _CHUTES_ROUTING_ALIASES:
