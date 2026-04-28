@@ -295,7 +295,7 @@ def test_create_openai_client_chutes_import_error():
     with patch.dict(sys.modules, {"chutes_e2ee": None}):
         with pytest.raises(RuntimeError, match="chutes-e2ee"):
             agent._create_openai_client(
-                {"api_key": "cpk_test", "base_url": "https://llm.chutes.ai/v1"},
+                {"api_key": "***", "base_url": "https://llm.chutes.ai/v1"},
                 reason="test",
                 shared=False,
             )
@@ -333,7 +333,7 @@ def test_create_openai_client_chutes_injects_transport():
     # ChutesE2EETransport instantiated once with correct kwargs
     assert mock_e2ee_transport_class.call_count == 1
     _call_kwargs = mock_e2ee_transport_class.call_args.kwargs
-    assert _call_kwargs["api_key"] == "cpk_test"
+    assert _call_kwargs["api_key"] == "***"
     assert _call_kwargs["api_base"] == "https://api.chutes.ai"
     assert "models_base" not in _call_kwargs
     # inner must be an httpx HTTPTransport (not None)

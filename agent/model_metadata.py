@@ -53,6 +53,7 @@ _PROVIDER_PREFIXES: frozenset[str] = frozenset({
     "chutes",
     "arcee",
     "gmi",
+    "tencent-tokenhub",
     "custom", "local",
     # Common aliases
     "google", "google-gemini", "google-ai-studio",
@@ -61,6 +62,7 @@ _PROVIDER_PREFIXES: frozenset[str] = frozenset({
     "ollama",
     "stepfun", "opencode", "zen", "go", "vercel", "kilo", "dashscope", "aliyun", "qwen",
     "mimo", "xiaomi-mimo",
+    "tencent", "tokenhub", "tencent-cloud", "tencentmaas",
     "arcee-ai", "arceeai",
     "gmi-cloud", "gmicloud",
     "xai", "x-ai", "x.ai", "grok",
@@ -210,6 +212,8 @@ DEFAULT_CONTEXT_LENGTHS = {
     "grok": 131072,             # catch-all (grok-beta, unknown grok-*)
     # Kimi
     "kimi": 262144,
+    # Tencent — Hy3 Preview (Hunyuan) with 256K context window
+    "hy3-preview": 256000,
     # Nemotron — NVIDIA's open-weights series (128K context across all sizes)
     "nemotron": 131072,
     # Arcee
@@ -313,6 +317,7 @@ _URL_TO_PROVIDER: Dict[str, str] = {
     "xiaomimimo.com": "xiaomi",
     "llm.chutes.ai": "chutes",
     "api.gmi-serving.com": "gmi",
+    "tokenhub.tencentmaas.com": "tencent-tokenhub",
     "ollama.com": "ollama-cloud",
 }
 
