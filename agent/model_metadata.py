@@ -50,6 +50,7 @@ _PROVIDER_PREFIXES: frozenset[str] = frozenset({
     "opencode-zen", "opencode-go", "ai-gateway", "kilocode", "alibaba",
     "qwen-oauth",
     "xiaomi",
+    "chutes",
     "arcee",
     "gmi",
     "tencent-tokenhub",
@@ -67,6 +68,7 @@ _PROVIDER_PREFIXES: frozenset[str] = frozenset({
     "xai", "x-ai", "x.ai", "grok",
     "nvidia", "nim", "nvidia-nim", "nemotron",
     "qwen-portal",
+    "chutes-ai",
 })
 
 
@@ -360,6 +362,7 @@ _URL_TO_PROVIDER: Dict[str, str] = {
     "integrate.api.nvidia.com": "nvidia",
     "api.xiaomimimo.com": "xiaomi",
     "xiaomimimo.com": "xiaomi",
+    "llm.chutes.ai": "chutes",
     "api.gmi-serving.com": "gmi",
     "tokenhub.tencentmaas.com": "tencent-tokenhub",
     "ollama.com": "ollama-cloud",
@@ -397,6 +400,16 @@ def _infer_provider_from_url(base_url: str) -> Optional[str]:
 
 def _is_known_provider_base_url(base_url: str) -> bool:
     return _infer_provider_from_url(base_url) is not None
+
+
+# Providers whose live /models endpoint is the source of truth for
+# context_length metadata.
+_LIVE_ENDPOINT_METADATA_PROVIDERS: frozenset[str] = frozenset({"chutes"})
+
+
+def _provider_prefers_live_endpoint_metadata(base_url: str) -> bool:
+    """Return True when the live /models endpoint should beat fuzzy defaults."""
+    return _infer_provider_from_url(base_url) in _LIVE_ENDPOINT_METADATA_PROVIDERS
 
 
 def is_local_endpoint(base_url: str) -> bool:
@@ -1527,12 +1540,17 @@ def get_model_context_length(
         except ImportError:
             pass  # boto3 not installed — fall through to generic resolution
 
-    # 2. Active endpoint metadata for truly custom/unknown endpoints.
+    # 2. Active endpoint metadata for truly custom/unknown endpoints and for
+    # providers whose live /models endpoint is authoritative (e.g. Chutes).
     # Known providers (Copilot, OpenAI, Anthropic, etc.) skip this — their
     # /models endpoint may report a provider-imposed limit (e.g. Copilot
     # returns 128k) instead of the model's full context (400k).  models.dev
     # has the correct per-provider values and is checked at step 5+.
-    if _is_custom_endpoint(base_url) and not _is_known_provider_base_url(base_url):
+    prefers_endpoint_metadata = _provider_prefers_live_endpoint_metadata(base_url)
+    use_endpoint_metadata = _is_custom_endpoint(base_url) and (
+        not _is_known_provider_base_url(base_url) or prefers_endpoint_metadata
+    )
+    if use_endpoint_metadata:
         context_length = _resolve_endpoint_context_length(model, base_url, api_key=api_key)
         if context_length is not None:
             return context_length
@@ -1544,6 +1562,11 @@ def get_model_context_length(
             if ctx is not None:
                 save_context_length(model, base_url, ctx)
                 return ctx
+        # For unknown custom endpoints and live-endpoint-authoritative providers,
+        # fall back to DEFAULT_FALLBACK_CONTEXT rather than fuzzy name matching
+        # that can lie about the real context window (e.g. "glm" → 202,752 for
+        # a GLM-5-TEE deployment that actually runs at 65,536).
+        if not _is_known_provider_base_url(base_url) or prefers_endpoint_metadata:
             # 3. Try querying local server directly
             if is_local_endpoint(base_url):
                 local_ctx = _query_local_context_length(model, base_url, api_key=api_key)

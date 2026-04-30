@@ -189,6 +189,10 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         transport="openai_chat",
         base_url_env_var="OLLAMA_BASE_URL",
     ),
+    "chutes": HermesOverlay(
+        transport="openai_chat",
+        base_url_override="https://llm.chutes.ai/v1",
+    ),
     # Azure Foundry: supports both OpenAI-style and Anthropic-style endpoints.
     # The transport is determined at runtime from config.yaml model.api_mode.
     "azure-foundry": HermesOverlay(
@@ -313,6 +317,9 @@ ALIASES: Dict[str, str] = {
     "mimo": "xiaomi",
     "xiaomi-mimo": "xiaomi",
 
+    # chutes
+    "chutes-ai": "chutes",
+
     # tencent
     "tencent": "tencent-tokenhub",
     "tokenhub": "tencent-tokenhub",
@@ -355,6 +362,7 @@ _LABEL_OVERRIDES: Dict[str, str] = {
     "copilot-acp": "GitHub Copilot ACP",
     "stepfun": "StepFun Step Plan",
     "xiaomi": "Xiaomi MiMo",
+    "chutes": "Chutes.ai",
     "gmi": "GMI Cloud",
     "tencent-tokenhub": "Tencent TokenHub",
     "lmstudio": "LM Studio",

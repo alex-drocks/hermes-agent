@@ -1975,6 +1975,7 @@ def select_provider_and_model(args=None):
         "gmi",
         "nvidia",
         "ollama-cloud",
+        "chutes",
         "tencent-tokenhub",
         "lmstudio",
     } or _is_profile_api_key_provider(selected_provider):
