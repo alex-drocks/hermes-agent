@@ -1857,6 +1857,7 @@ def select_provider_and_model(args=None):
         "gmi",
         "nvidia",
         "ollama-cloud",
+        "chutes",
         "tencent-tokenhub",
         "lmstudio",
     ):

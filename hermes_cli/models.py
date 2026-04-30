@@ -321,6 +321,11 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
         "mimo-v2-omni",
         "mimo-v2-flash",
     ],
+    "chutes": [
+        "default",
+        "default:latency",
+        "default:throughput",
+    ],
     "tencent-tokenhub": [
         "hy3-preview",
     ],
@@ -795,6 +800,7 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("minimax-oauth",  "MiniMax (OAuth)",          "MiniMax via OAuth browser login (Coding Plan, minimax.io)"),
     ProviderEntry("minimax-cn",     "MiniMax (China)",          "MiniMax China (domestic direct API)"),
     ProviderEntry("alibaba",        "Alibaba Cloud (DashScope)","Alibaba Cloud / DashScope Coding (Qwen + multi-provider)"),
+    ProviderEntry("chutes",         "Chutes.ai",                "Chutes.ai (TEE-secured E2EE inference — direct API)"),
     ProviderEntry("ollama-cloud",   "Ollama Cloud",             "Ollama Cloud (cloud-hosted open models — ollama.com)"),
     ProviderEntry("arcee",          "Arcee AI",                 "Arcee AI (Trinity models — direct API)"),
     ProviderEntry("gmi",            "GMI Cloud",                "GMI Cloud (multi-model direct API)"),
@@ -849,6 +855,7 @@ _PROVIDER_ALIASES = {
     "aigateway": "ai-gateway",
     "vercel": "ai-gateway",
     "vercel-ai-gateway": "ai-gateway",
+    "chutes-ai": "chutes",
     "kilo": "kilocode",
     "kilo-code": "kilocode",
     "kilo-gateway": "kilocode",
@@ -1964,6 +1971,10 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         live = fetch_ollama_cloud_models(force_refresh=force_refresh)
         if live:
             return live
+    if normalized == "chutes":
+        live = fetch_chutes_models()
+        if live:
+            return live
     if normalized == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if api_key:
@@ -2937,6 +2948,72 @@ def _save_ollama_cloud_cache(models: list[str]) -> None:
         atomic_json_write(cache_path, {"models": models, "cached_at": time.time()}, indent=None)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Chutes — live model catalog
+# ---------------------------------------------------------------------------
+
+CHUTES_BASE_URL = "https://llm.chutes.ai/v1"
+_CHUTES_ROUTING_ALIASES: tuple[str, ...] = (
+    "default",
+    "default:latency",
+    "default:throughput",
+)
+
+
+def fetch_chutes_models(
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    timeout: float = 5.0,
+) -> Optional[list[str]]:
+    """Fetch the live Chutes catalog from ``https://llm.chutes.ai/v1/models``.
+
+    Only returns **TEE / Confidential-Compute** models (``confidential_compute=True``).
+    TEE models are the only ones that benefit from transparent E2EE transport.
+    Non-TEE chutes are hidden from the TUI because they would fail or silently
+    downgrade without hardware-based attestation.
+
+    Returns live IDs plus routing aliases on success, or ``None`` when the
+    endpoint is unreachable (callers should fall back to the static trio).
+    """
+    import json as _json
+    import urllib.request
+
+    if not api_key:
+        api_key = os.getenv("CHUTES_API_KEY", "").strip()
+    if not base_url:
+        base_url = CHUTES_BASE_URL
+
+    url = base_url.rstrip("/") + "/models"
+    headers: dict[str, str] = {"User-Agent": _HERMES_USER_AGENT}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = _json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+    tee_ids = [
+        m.get("id", "")
+        for m in data.get("data", [])
+        if m.get("id") and m.get("confidential_compute") is True
+    ]
+
+    seen: set[str] = set()
+    merged: list[str] = []
+    for model_id in tee_ids:
+        if model_id not in seen:
+            seen.add(model_id)
+            merged.append(model_id)
+    for alias in _CHUTES_ROUTING_ALIASES:
+        if alias not in seen:
+            seen.add(alias)
+            merged.append(alias)
+    return merged
 
 
 def fetch_ollama_cloud_models(
