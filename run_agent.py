@@ -6592,6 +6592,7 @@ class AIAgent:
             _e2ee_transport = _ChutesE2EETransport(
                 api_key=_api_key,
                 api_base="https://api.chutes.ai",
+                models_base="https://llm.chutes.ai",
                 inner=_inner_transport,
             )
             _e2ee_http = _httpx.Client(
