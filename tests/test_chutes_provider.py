@@ -365,10 +365,10 @@ def test_chutes_in_doctor_apikey_checks():
 def test_chutes_api_key_in_env_config():
     """``CHUTES_API_KEY`` must be in the managed env-var registry so
     ``hermes setup`` prompts for it and ``hermes config set`` has metadata."""
-    from hermes_cli.config import _ENV_CONFIG
+    from hermes_cli.config import OPTIONAL_ENV_VARS as _ENV_REGISTRY
 
-    assert "CHUTES_API_KEY" in _ENV_CONFIG
-    entry = _ENV_CONFIG["CHUTES_API_KEY"]
+    assert "CHUTES_API_KEY" in _ENV_REGISTRY
+    entry = _ENV_REGISTRY["CHUTES_API_KEY"]
     assert entry["password"] is True
     assert entry["category"] == "provider"
     assert "chutes.ai" in entry["url"].lower()
