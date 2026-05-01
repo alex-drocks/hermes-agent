@@ -337,3 +337,21 @@ def test_create_openai_client_chutes_injects_transport():
     assert _call_kwargs["models_base"] == "https://llm.chutes.ai"
     # inner must be an httpx HTTPTransport (not None)
     assert _call_kwargs["inner"] is not None
+
+
+# -----------------------------------------------------------------------------
+# Doctor — API-key provider health check
+# -----------------------------------------------------------------------------
+
+
+def test_chutes_in_doctor_apikey_checks():
+    """``hermes doctor`` must include Chutes in the API-key health-check list."""
+    import hermes_cli.doctor as doctor_mod
+
+    # The _apikey_providers list is built inside the doctor() function,
+    # so inspect its source for the literal tuple entries.
+    import inspect as _inspect
+    source = _inspect.getsource(doctor_mod.doctor)
+    assert '"CHUTES_API_KEY"' in source
+    assert '"Chutes.ai"' in source
+    assert '"https://llm.chutes.ai/v1/models"' in source
