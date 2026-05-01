@@ -406,6 +406,13 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         api_key_env_vars=(),
         base_url_env_var="BEDROCK_BASE_URL",
     ),
+    "chutes": ProviderConfig(
+        id="chutes",
+        name="Chutes.ai",
+        auth_type="api_key",
+        inference_base_url="https://llm.chutes.ai/v1",
+        api_key_env_vars=("CHUTES_API_KEY",),
+    ),
     "azure-foundry": ProviderConfig(
         id="azure-foundry",
         name="Azure Foundry",
@@ -1184,6 +1191,7 @@ def resolve_provider(
         "qwen-portal": "qwen-oauth", "qwen-cli": "qwen-oauth", "qwen-oauth": "qwen-oauth", "google-gemini-cli": "google-gemini-cli", "gemini-cli": "google-gemini-cli", "gemini-oauth": "google-gemini-cli",
         "hf": "huggingface", "hugging-face": "huggingface", "huggingface-hub": "huggingface",
         "mimo": "xiaomi", "xiaomi-mimo": "xiaomi",
+        "chutes-ai": "chutes",
         "tencent": "tencent-tokenhub", "tokenhub": "tencent-tokenhub",
         "tencent-cloud": "tencent-tokenhub", "tencentmaas": "tencent-tokenhub",
         "aws": "bedrock", "aws-bedrock": "bedrock", "amazon-bedrock": "bedrock", "amazon": "bedrock",
