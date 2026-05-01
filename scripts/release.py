@@ -153,6 +153,10 @@ AUTHOR_MAP = {
     "valdi.jorge@gmail.com": "jvcl",
     "q19dcp@gmail.com": "aj-nt",
     "ebukau84@gmail.com": "UgwujaGeorge",
+    # Chutes provider integration (May 2026)
+    "alex.desroches7@gmail.com": "alex-drocks",
+    "hermes-agent@noreply.local": "Hermes",
+    "promptsiren@gmail.com": "firefly",
     "francip@gmail.com": "francip",
     "omni@comelse.com": "omnissiah-comelse",
     "oussama.redcode@gmail.com": "mavrickdeveloper",
