@@ -5503,6 +5503,49 @@ class AIAgent:
                     self._client_log_context(),
                 )
                 return client
+        if self.provider == "chutes":
+            try:
+                from chutes_e2ee import ChutesE2EETransport as _ChutesE2EETransport
+            except ImportError as _e:
+                raise RuntimeError(
+                    "Chutes E2EE support requires `chutes-e2ee`. "
+                    "Install with: pip install hermes-agent[chutes]"
+                ) from _e
+
+            # Build an inner HTTPTransport with the same TCP keepalive
+            # socket options Hermes uses everywhere else.
+            import httpx as _httpx
+            import socket as _socket
+
+            _sock_opts = [(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)]
+            if hasattr(_socket, "TCP_KEEPIDLE"):
+                _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPIDLE, 30))
+                _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPINTVL, 10))
+                _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPCNT, 3))
+            elif hasattr(_socket, "TCP_KEEPALIVE"):
+                _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPALIVE, 30))
+            _inner_transport = _httpx.HTTPTransport(socket_options=_sock_opts)
+
+            _api_key = client_kwargs.get("api_key", "")
+            _e2ee_transport = _ChutesE2EETransport(
+                api_key=_api_key,
+                api_base="https://api.chutes.ai",
+                models_base="https://llm.chutes.ai",
+                inner=_inner_transport,
+            )
+            _e2ee_http = _httpx.Client(
+                transport=_e2ee_transport,
+                proxy=_get_proxy_for_base_url("https://api.chutes.ai"),
+            )
+            client_kwargs["http_client"] = _e2ee_http
+            client = OpenAI(**client_kwargs)
+            logger.info(
+                "Chutes E2EE client created (%s, shared=%s) %s",
+                reason,
+                shared,
+                self._client_log_context(),
+            )
+            return client
         # Inject TCP keepalives so the kernel detects dead provider connections
         # instead of letting them sit silently in CLOSE-WAIT (#10324).  Without
         # this, a peer that drops mid-stream leaves the socket in a state where

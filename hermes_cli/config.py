@@ -1540,6 +1540,14 @@ OPTIONAL_ENV_VARS = {
         "password": False,
         "category": "provider",
     },
+    "CHUTES_API_KEY": {
+        "description": "Chutes.ai API key for TEE-secured E2EE inference",
+        "prompt": "Chutes.ai API key",
+        "url": "https://chutes.ai/app/api-keys",
+        "password": True,
+        "category": "provider",
+        "advanced": True,
+    },
     "DASHSCOPE_API_KEY": {
         "description": "Alibaba Cloud DashScope API key (Qwen + multi-provider models)",
         "prompt": "DashScope API Key",

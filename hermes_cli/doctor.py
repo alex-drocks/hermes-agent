@@ -59,6 +59,7 @@ _PROVIDER_ENV_HINTS = (
     "OPENCODE_ZEN_API_KEY",
     "OPENCODE_GO_API_KEY",
     "XIAOMI_API_KEY",
+    "CHUTES_API_KEY",
     "TOKENHUB_API_KEY",
 )
 
@@ -1089,6 +1090,7 @@ def run_doctor(args):
         ("Kimi / Moonshot (China)", ("KIMI_CN_API_KEY",),                    "https://api.moonshot.cn/v1/models",   None, True),
         ("Arcee AI",         ("ARCEEAI_API_KEY",),                            "https://api.arcee.ai/api/v1/models",  "ARCEE_BASE_URL", True),
         ("GMI Cloud",        ("GMI_API_KEY",),                                "https://api.gmi-serving.com/v1/models", "GMI_BASE_URL", True),
+        ("Chutes.ai",        ("CHUTES_API_KEY",),                             "https://llm.chutes.ai/v1/models",     None, True),
         ("DeepSeek",         ("DEEPSEEK_API_KEY",),                           "https://api.deepseek.com/v1/models",  "DEEPSEEK_BASE_URL", True),
         ("Hugging Face",     ("HF_TOKEN",),                                   "https://router.huggingface.co/v1/models", "HF_BASE_URL", True),
         ("NVIDIA NIM",       ("NVIDIA_API_KEY",),                             "https://integrate.api.nvidia.com/v1/models", "NVIDIA_BASE_URL", True),
