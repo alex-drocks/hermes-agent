@@ -104,7 +104,9 @@ You can set a custom avatar and banner for your bot on this page. This is what u
 :::
 
 :::info[Private Bot Alternative]
-If you prefer to keep your bot private (Public Bot = OFF), you **must** use the **Manual URL** method in Step 5 instead of the Installation tab. The Discord-provided link requires Public Bot to be enabled.
+If you prefer to keep your bot private (Public Bot = OFF), use the **Manual URL** method in Step 5 instead of the Discord-provided install link.
+
+Public Bot = OFF does **not** mean User Install. Hermes still needs **Guild Install** enabled under **Installation Contexts** so Discord can attach the bot and its `applications.commands` integration to your server. Manual URL only replaces Discord's generated link; it does not replace the Guild Install context.
 :::
 
 ## Step 3: Enable Privileged Gateway Intents
@@ -174,6 +176,8 @@ https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot+application
 ```
 
 Replace `YOUR_APP_ID` with the Application ID from Step 1.
+
+Before opening the URL, still visit **Installation** → **Installation Contexts** and make sure **Guild Install** is enabled. If only **User Install** is enabled, Discord may show slash commands in a DM but fail with **Unknown Integration** when you run them because the command is not attached to the guild bot installation.
 
 ### Required Permissions
 
@@ -565,6 +569,12 @@ Refreshing the directory (`/channels refresh` on platforms that expose it, or a 
 **Cause**: Your code requests intents that aren't enabled in the Developer Portal.
 
 **Fix**: Enable all three Privileged Gateway Intents (Presence, Server Members, Message Content) in the Bot settings, then restart.
+
+### Slash command says "Unknown Integration" in a DM
+
+**Cause**: The Discord application is configured for **User Install** but not **Guild Install**, or it was invited before Guild Install had the `bot` and `applications.commands` scopes. Discord can still show cached slash commands in the bot DM, but invocation fails before Hermes receives the interaction.
+
+**Fix**: Go to [Developer Portal](https://discord.com/developers/applications) → your app → Installation → **Installation Contexts** → enable **Guild Install**. Under **Default Install Settings** for Guild Install, include `bot` and `applications.commands`, then re-authorize the bot with the invite URL from Step 5 and restart the gateway.
 
 ### Bot can't see messages in a specific channel
 
