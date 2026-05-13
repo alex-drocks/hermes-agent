@@ -6480,7 +6480,7 @@ class AIAgent:
         return False
 
     @staticmethod
-    def _build_keepalive_http_transport() -> Any:
+    def _build_keepalive_http_transport(proxy: Any = None) -> Any:
         try:
             import httpx as _httpx
             import socket as _socket
@@ -6492,7 +6492,10 @@ class AIAgent:
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPCNT, 3))
             elif hasattr(_socket, "TCP_KEEPALIVE"):
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPALIVE, 30))
-            return _httpx.HTTPTransport(socket_options=_sock_opts)
+            kwargs = {"socket_options": _sock_opts}
+            if proxy is not None:
+                kwargs["proxy"] = proxy
+            return _httpx.HTTPTransport(**kwargs)
         except Exception:
             return None
 

@@ -71,7 +71,7 @@ class ProviderProfile:
         *,
         api_key: str | None = None,
         base_url: str = "",
-        make_http_transport: Callable[[], Any] | None = None,
+        make_http_transport: Callable[..., Any] | None = None,
         proxy_for_base_url: Callable[[str], Any] | None = None,
         **context: Any,
     ) -> Any | None:
@@ -81,6 +81,18 @@ class ProviderProfile:
         keepalive-enabled client. Override only when the provider needs a custom
         transport while still using the OpenAI SDK request path.
         """
+        return None
+
+    def build_async_http_client(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str = "",
+        make_async_http_transport: Callable[..., Any] | None = None,
+        proxy_for_base_url: Callable[[str], Any] | None = None,
+        **context: Any,
+    ) -> Any | None:
+        """Return a custom async httpx client for AsyncOpenAI-compatible paths."""
         return None
 
     def get_hostname(self) -> str:

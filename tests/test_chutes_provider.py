@@ -133,9 +133,31 @@ def test_chutes_http_client_uses_e2ee_transport():
         inner=inner_transport,
     )
     proxy_for_base_url.assert_called_once_with("https://api.chutes.ai")
-    httpx_client.assert_called_once_with(
-        transport=e2ee_transport,
-        proxy="http://proxy.example",
+    httpx_client.assert_called_once_with(transport=e2ee_transport)
+
+
+def test_chutes_http_client_applies_proxy_to_inner_transport():
+    from providers import get_provider_profile
+
+    e2ee_transport_class = MagicMock(return_value=MagicMock())
+    fake_module = MagicMock(ChutesE2EETransport=e2ee_transport_class)
+    http_client = MagicMock()
+    inner_transport = MagicMock()
+    make_http_transport = MagicMock(return_value=inner_transport)
+
+    with patch.dict(sys.modules, {"chutes_e2ee": fake_module}):
+        with patch("httpx.Client", return_value=http_client):
+            get_provider_profile("chutes").build_http_client(
+                api_key="cpk_test",
+                make_http_transport=make_http_transport,
+                proxy_for_base_url=MagicMock(return_value="http://proxy.example"),
+            )
+
+    make_http_transport.assert_called_once_with(proxy="http://proxy.example")
+    e2ee_transport_class.assert_called_once_with(
+        api_key="cpk_test",
+        api_base="https://api.chutes.ai",
+        inner=inner_transport,
     )
 
 
@@ -166,3 +188,67 @@ def test_create_openai_client_uses_provider_http_client_without_mutating_kwargs(
     assert kwargs == {"api_key": "cpk_test", "base_url": "https://llm.chutes.ai/v1"}
     openai.assert_called_once()
     assert openai.call_args.kwargs["http_client"] is http_client
+
+
+def test_auxiliary_resolve_chutes_uses_e2ee_http_client():
+    from agent.auxiliary_client import resolve_provider_client
+
+    e2ee_transport_class = MagicMock(return_value=MagicMock())
+    fake_module = MagicMock(ChutesE2EETransport=e2ee_transport_class)
+    http_client = MagicMock()
+    openai_client = MagicMock()
+
+    with patch.dict(sys.modules, {"chutes_e2ee": fake_module}):
+        with patch(
+            "hermes_cli.auth.resolve_api_key_provider_credentials",
+            return_value={"api_key": "cpk_test", "base_url": "https://llm.chutes.ai/v1"},
+        ):
+            with patch("httpx.Client", return_value=http_client):
+                with patch("agent.auxiliary_client.OpenAI", return_value=openai_client) as openai:
+                    client, model = resolve_provider_client(
+                        "chutes",
+                        "Qwen/Qwen3-32B-TEE",
+                        async_mode=False,
+                    )
+
+    assert client is openai_client
+    assert model == "Qwen/Qwen3-32B-TEE"
+    openai.assert_called_once()
+    assert openai.call_args.kwargs["http_client"] is http_client
+
+
+def test_auxiliary_resolve_chutes_async_uses_async_e2ee_http_client():
+    from agent.auxiliary_client import resolve_provider_client
+
+    sync_transport_class = MagicMock(return_value=MagicMock())
+    async_transport_class = MagicMock(return_value=MagicMock())
+    fake_module = MagicMock(
+        ChutesE2EETransport=sync_transport_class,
+        AsyncChutesE2EETransport=async_transport_class,
+    )
+    sync_http_client = MagicMock()
+    async_http_client = MagicMock()
+    openai_client = MagicMock()
+    openai_client.api_key = "cpk_test"
+    openai_client.base_url = "https://llm.chutes.ai/v1"
+    async_openai_client = MagicMock()
+
+    with patch.dict(sys.modules, {"chutes_e2ee": fake_module}):
+        with patch(
+            "hermes_cli.auth.resolve_api_key_provider_credentials",
+            return_value={"api_key": "cpk_test", "base_url": "https://llm.chutes.ai/v1"},
+        ):
+            with patch("httpx.Client", return_value=sync_http_client):
+                with patch("httpx.AsyncClient", return_value=async_http_client):
+                    with patch("agent.auxiliary_client.OpenAI", return_value=openai_client):
+                        with patch("openai.AsyncOpenAI", return_value=async_openai_client) as async_openai:
+                            client, model = resolve_provider_client(
+                                "chutes",
+                                "Qwen/Qwen3-32B-TEE",
+                                async_mode=True,
+                            )
+
+    assert client is async_openai_client
+    assert model == "Qwen/Qwen3-32B-TEE"
+    async_openai.assert_called_once()
+    assert async_openai.call_args.kwargs["http_client"] is async_http_client

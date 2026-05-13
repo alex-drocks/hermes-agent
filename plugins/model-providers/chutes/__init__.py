@@ -25,6 +25,26 @@ CHUTES_FALLBACK_MODELS = (
 _USER_AGENT = f"HermesAgent/{_HERMES_VERSION}"
 
 
+def _build_transport(
+    factory: Callable[..., Any] | None,
+    fallback_factory: Callable[..., Any],
+    *,
+    proxy: Any = None,
+) -> Any:
+    if factory is not None:
+        if proxy is not None:
+            try:
+                transport = factory(proxy=proxy)
+            except TypeError:
+                transport = factory()
+        else:
+            transport = factory()
+        if transport is not None:
+            return transport
+    kwargs = {"proxy": proxy} if proxy is not None else {}
+    return fallback_factory(**kwargs)
+
+
 def _patch_model_discovery(transport: Any) -> None:
     """Point chutes-e2ee model discovery at Chutes' public model catalog.
 
@@ -58,7 +78,26 @@ def _patch_model_discovery(transport: Any) -> None:
             }
             discovery._model_map_loaded_at = time.time()
 
+    async def _maybe_refresh_model_map_async(client: Any) -> None:
+        now = time.time()
+        if now - discovery._model_map_loaded_at < discovery._MODEL_MAP_TTL:
+            return
+        resp = await client.get(
+            f"{CHUTES_MODELS_BASE}/v1/models",
+            headers=discovery._auth_headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        discovery._model_map = {
+            entry["id"]: entry["chute_id"]
+            for entry in data
+            if entry.get("id") and entry.get("chute_id")
+        }
+        discovery._model_map_loaded_at = time.time()
+
     discovery._maybe_refresh_model_map = _maybe_refresh_model_map
+    discovery._maybe_refresh_model_map_async = _maybe_refresh_model_map_async
 
 
 class ChutesProfile(ProviderProfile):
@@ -104,7 +143,7 @@ class ChutesProfile(ProviderProfile):
         *,
         api_key: str | None = None,
         base_url: str = "",
-        make_http_transport: Callable[[], Any] | None = None,
+        make_http_transport: Callable[..., Any] | None = None,
         proxy_for_base_url: Callable[[str], Any] | None = None,
         **context: Any,
     ) -> Any | None:
@@ -124,20 +163,54 @@ class ChutesProfile(ProviderProfile):
 
         import httpx
 
-        inner = make_http_transport() if make_http_transport is not None else None
-        if inner is None:
-            inner = httpx.HTTPTransport()
+        proxy = proxy_for_base_url(CHUTES_API_BASE) if proxy_for_base_url else None
+        inner = _build_transport(make_http_transport, httpx.HTTPTransport, proxy=proxy)
         transport = ChutesE2EETransport(
             api_key=api_key or "",
             api_base=CHUTES_API_BASE,
             inner=inner,
         )
         _patch_model_discovery(transport)
+        return httpx.Client(transport=transport)
+
+    def build_async_http_client(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str = "",
+        make_async_http_transport: Callable[..., Any] | None = None,
+        proxy_for_base_url: Callable[[str], Any] | None = None,
+        **context: Any,
+    ) -> Any | None:
+        try:
+            from chutes_e2ee import AsyncChutesE2EETransport
+        except ImportError:
+            try:
+                from tools.lazy_deps import ensure
+
+                ensure("provider.chutes")
+                from chutes_e2ee import AsyncChutesE2EETransport
+            except Exception as exc:
+                raise RuntimeError(
+                    "Chutes E2EE support requires `chutes-e2ee`. "
+                    "Install with: pip install hermes-agent[chutes]"
+                ) from exc
+
+        import httpx
+
         proxy = proxy_for_base_url(CHUTES_API_BASE) if proxy_for_base_url else None
-        return httpx.Client(
-            transport=transport,
+        inner = _build_transport(
+            make_async_http_transport,
+            httpx.AsyncHTTPTransport,
             proxy=proxy,
         )
+        transport = AsyncChutesE2EETransport(
+            api_key=api_key or "",
+            api_base=CHUTES_API_BASE,
+            inner=inner,
+        )
+        _patch_model_discovery(transport)
+        return httpx.AsyncClient(transport=transport)
 
 
 chutes = ChutesProfile(
