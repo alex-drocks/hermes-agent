@@ -399,6 +399,19 @@ def _is_known_provider_base_url(base_url: str) -> bool:
     return _infer_provider_from_url(base_url) is not None
 
 
+def _provider_prefers_live_endpoint_metadata(base_url: str) -> bool:
+    provider = _infer_provider_from_url(base_url)
+    if not provider:
+        return False
+    try:
+        from providers import get_provider_profile
+
+        profile = get_provider_profile(provider)
+        return bool(profile and profile.prefer_live_endpoint_metadata)
+    except Exception:
+        return False
+
+
 def is_local_endpoint(base_url: str) -> bool:
     """Return True if base_url points to a local machine.
 
@@ -1527,16 +1540,21 @@ def get_model_context_length(
         except ImportError:
             pass  # boto3 not installed — fall through to generic resolution
 
-    # 2. Active endpoint metadata for truly custom/unknown endpoints.
+    # 2. Active endpoint metadata for truly custom/unknown endpoints, plus
+    # providers that explicitly mark their live /models endpoint authoritative.
     # Known providers (Copilot, OpenAI, Anthropic, etc.) skip this — their
     # /models endpoint may report a provider-imposed limit (e.g. Copilot
     # returns 128k) instead of the model's full context (400k).  models.dev
     # has the correct per-provider values and is checked at step 5+.
-    if _is_custom_endpoint(base_url) and not _is_known_provider_base_url(base_url):
+    prefers_endpoint_metadata = _provider_prefers_live_endpoint_metadata(base_url)
+    use_endpoint_metadata = _is_custom_endpoint(base_url) and (
+        not _is_known_provider_base_url(base_url) or prefers_endpoint_metadata
+    )
+    if use_endpoint_metadata:
         context_length = _resolve_endpoint_context_length(model, base_url, api_key=api_key)
         if context_length is not None:
             return context_length
-        if not _is_known_provider_base_url(base_url):
+        if not _is_known_provider_base_url(base_url) or prefers_endpoint_metadata:
             # 2b. Ollama native /api/show — any URL might be an Ollama server
             # (local, cloud, or custom hosting).  Non-Ollama servers return
             # 404/405 quickly.  Fall through on failure.

@@ -81,6 +81,8 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
     "provider.anthropic": ("anthropic==0.86.0",),
     # AWS Bedrock provider
     "provider.bedrock": ("boto3==1.42.89",),
+    # Chutes.ai E2EE transport
+    "provider.chutes": ("chutes-e2ee==0.1.0",),
 
     # ─── Web search backends ───────────────────────────────────────────────
     "search.exa": ("exa-py==2.10.2",),

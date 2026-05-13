@@ -49,6 +49,7 @@ from pathlib import Path  # noqa: F401 — used by test mocks
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from urllib.parse import urlparse, parse_qs, urlunparse
+import urllib.request
 
 # NOTE: `from openai import OpenAI` is deliberately NOT at module top — the
 # openai SDK pulls a large type tree (~240 ms cold, including responses/*,
@@ -103,6 +104,7 @@ from agent.credential_pool import load_pool
 from hermes_cli.config import get_hermes_home
 from hermes_constants import OPENROUTER_BASE_URL
 from utils import base_url_host_matches, base_url_hostname, normalize_proxy_env_vars
+from utils import normalize_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +115,96 @@ def _safe_isinstance(obj: Any, maybe_type: Any) -> bool:
         return isinstance(obj, maybe_type)
     except TypeError:
         return False
+
+
+def _get_proxy_from_env() -> Optional[str]:
+    for key in (
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "ALL_PROXY",
+        "https_proxy",
+        "http_proxy",
+        "all_proxy",
+    ):
+        value = os.environ.get(key, "").strip()
+        if value:
+            return normalize_proxy_url(value)
+    return None
+
+
+def _get_proxy_for_base_url(base_url: Optional[str]) -> Optional[str]:
+    proxy = _get_proxy_from_env()
+    if not proxy or not base_url:
+        return proxy
+
+    host = base_url_hostname(base_url)
+    if not host:
+        return proxy
+
+    try:
+        if urllib.request.proxy_bypass_environment(host):
+            return None
+    except Exception:
+        pass
+    return proxy
+
+
+def _keepalive_socket_options() -> list[tuple[int, int, int]]:
+    import socket as _socket
+
+    opts = [(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE, 1)]
+    if hasattr(_socket, "TCP_KEEPIDLE"):
+        opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPIDLE, 30))
+        opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPINTVL, 10))
+        opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPCNT, 3))
+    elif hasattr(_socket, "TCP_KEEPALIVE"):
+        opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPALIVE, 30))
+    return opts
+
+
+def _build_keepalive_http_transport(proxy: Any = None) -> Any:
+    try:
+        import httpx
+
+        return httpx.HTTPTransport(socket_options=_keepalive_socket_options(), proxy=proxy)
+    except Exception:
+        return None
+
+
+def _build_keepalive_async_http_transport(proxy: Any = None) -> Any:
+    try:
+        import httpx
+
+        return httpx.AsyncHTTPTransport(socket_options=_keepalive_socket_options(), proxy=proxy)
+    except Exception:
+        return None
+
+
+def _provider_http_client(
+    provider_id: str,
+    *,
+    api_key: str,
+    base_url: str,
+    async_mode: bool = False,
+) -> Any | None:
+    from providers import get_provider_profile
+
+    profile = get_provider_profile(provider_id)
+    if profile is None:
+        return None
+    if async_mode:
+        return profile.build_async_http_client(
+            api_key=api_key,
+            base_url=base_url,
+            make_async_http_transport=_build_keepalive_async_http_transport,
+            proxy_for_base_url=_get_proxy_for_base_url,
+        )
+    return profile.build_http_client(
+        api_key=api_key,
+        base_url=base_url,
+        make_http_transport=_build_keepalive_http_transport,
+        proxy_for_base_url=_get_proxy_for_base_url,
+    )
 
 
 def _extract_url_query_params(url: str):
@@ -1356,6 +1448,13 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
                         extra["default_headers"] = dict(_ph_aux.default_headers)
                 except Exception:
                     pass
+            profile_http = _provider_http_client(
+                provider_id,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            if profile_http is not None:
+                extra["http_client"] = profile_http
             _client = OpenAI(api_key=api_key, base_url=base_url, **extra)
             _client = _maybe_wrap_anthropic(_client, model, api_key, raw_base_url)
             return _client, model
@@ -1391,6 +1490,13 @@ def _resolve_api_key_provider() -> Tuple[Optional[OpenAI], Optional[str]]:
                     extra["default_headers"] = dict(_ph_aux2.default_headers)
             except Exception:
                 pass
+        profile_http = _provider_http_client(
+            provider_id,
+            api_key=api_key,
+            base_url=base_url,
+        )
+        if profile_http is not None:
+            extra["http_client"] = profile_http
         _client = OpenAI(api_key=api_key, base_url=base_url, **extra)
         _client = _maybe_wrap_anthropic(_client, model, api_key, raw_base_url)
         return _client, model
@@ -2637,6 +2743,21 @@ def _to_async_client(sync_client, model: str, is_vision: bool = False):
                     async_kwargs["default_headers"] = dict(_ph_async.default_headers)
         except Exception:
             pass
+    try:
+        from agent.model_metadata import _infer_provider_from_url
+
+        inferred_provider = _infer_provider_from_url(sync_base_url)
+        if inferred_provider:
+            async_http = _provider_http_client(
+                inferred_provider,
+                api_key=str(sync_client.api_key),
+                base_url=sync_base_url,
+                async_mode=True,
+            )
+            if async_http is not None:
+                async_kwargs["http_client"] = async_http
+    except Exception:
+        pass
     return AsyncOpenAI(**async_kwargs), model
 
 
@@ -3074,8 +3195,17 @@ def resolve_provider_client(
                     headers.update(_ph_main.default_headers)
             except Exception:
                 pass
-        client = OpenAI(api_key=api_key, base_url=base_url,
-                        **({"default_headers": headers} if headers else {}))
+        client_kwargs = {"api_key": api_key, "base_url": base_url}
+        if headers:
+            client_kwargs["default_headers"] = headers
+        profile_http = _provider_http_client(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+        )
+        if profile_http is not None:
+            client_kwargs["http_client"] = profile_http
+        client = OpenAI(**client_kwargs)
 
         # Copilot GPT-5+ models (except gpt-5-mini) require the Responses
         # API — they are not accessible via /chat/completions.  Wrap the

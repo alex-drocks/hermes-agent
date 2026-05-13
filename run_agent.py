@@ -6480,7 +6480,7 @@ class AIAgent:
         return False
 
     @staticmethod
-    def _build_keepalive_http_client(base_url: str = "") -> Any:
+    def _build_keepalive_http_transport(proxy: Any = None) -> Any:
         try:
             import httpx as _httpx
             import socket as _socket
@@ -6492,13 +6492,25 @@ class AIAgent:
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPCNT, 3))
             elif hasattr(_socket, "TCP_KEEPALIVE"):
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPALIVE, 30))
+            return _httpx.HTTPTransport(socket_options=_sock_opts, proxy=proxy)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_keepalive_http_client(base_url: str = "") -> Any:
+        try:
+            import httpx as _httpx
+
+            transport = AIAgent._build_keepalive_http_transport()
+            if transport is None:
+                return None
             # When a custom transport is provided, httpx won't auto-read proxy
             # from env vars (allow_env_proxies = trust_env and transport is None).
             # Explicitly read proxy settings while still honoring NO_PROXY for
             # loopback / local endpoints such as a locally hosted sub2api.
             _proxy = _get_proxy_for_base_url(base_url)
             return _httpx.Client(
-                transport=_httpx.HTTPTransport(socket_options=_sock_opts),
+                transport=transport,
                 proxy=_proxy,
             )
         except Exception:
@@ -6565,6 +6577,23 @@ class AIAgent:
                     self._client_log_context(),
                 )
                 return client
+
+        try:
+            from providers import get_provider_profile as _get_provider_profile
+
+            _profile = _get_provider_profile(self.provider or "")
+        except Exception:
+            _profile = None
+        if _profile is not None and "http_client" not in client_kwargs:
+            profile_http = _profile.build_http_client(
+                api_key=client_kwargs.get("api_key"),
+                base_url=str(client_kwargs.get("base_url") or ""),
+                make_http_transport=self._build_keepalive_http_transport,
+                proxy_for_base_url=_get_proxy_for_base_url,
+            )
+            if profile_http is not None:
+                client_kwargs["http_client"] = profile_http
+
         # Inject TCP keepalives so the kernel detects dead provider connections
         # instead of letting them sit silently in CLOSE-WAIT (#10324).  Without
         # this, a peer that drops mid-stream leaves the socket in a state where
