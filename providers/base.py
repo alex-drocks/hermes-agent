@@ -4,16 +4,16 @@ A ProviderProfile declares everything about an inference provider in one place:
 auth, endpoints, client quirks, request-time quirks. The transport reads this
 instead of receiving 20+ boolean flags.
 
-Provider profiles are DECLARATIVE — they describe the provider's behavior.
-They do NOT own client construction, credential rotation, or streaming.
-Those stay on AIAgent.
+Provider profiles are mostly DECLARATIVE — they describe the provider's
+behavior.  Credential rotation and streaming stay on AIAgent; providers that
+need a custom OpenAI-SDK transport can return one from build_http_client().
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ class ProviderProfile:
 
     # ── Client-level quirks (set once at client construction) ─
     default_headers: dict[str, str] = field(default_factory=dict)
+    prefer_live_endpoint_metadata: bool = False
 
     # ── Request-level quirks ─────────────────────────────────
     # Temperature: None = use caller's default, OMIT_TEMPERATURE = don't send
@@ -64,6 +65,23 @@ class ProviderProfile:
     # empty = use main model
 
     # ── Hooks (override in subclass for complex providers) ───
+
+    def build_http_client(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str = "",
+        make_http_transport: Callable[[], Any] | None = None,
+        proxy_for_base_url: Callable[[str], Any] | None = None,
+        **context: Any,
+    ) -> Any | None:
+        """Return a custom sync httpx client for OpenAI-compatible providers.
+
+        Most providers should return None and let AIAgent create its standard
+        keepalive-enabled client. Override only when the provider needs a custom
+        transport while still using the OpenAI SDK request path.
+        """
+        return None
 
     def get_hostname(self) -> str:
         """Return the provider's base hostname for URL-based detection.
