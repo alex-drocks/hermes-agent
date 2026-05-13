@@ -4,9 +4,9 @@ A ProviderProfile declares everything about an inference provider in one place:
 auth, endpoints, client quirks, request-time quirks. The transport reads this
 instead of receiving 20+ boolean flags.
 
-Provider profiles are mostly DECLARATIVE — they describe the provider's
-behavior.  Credential rotation and streaming stay on AIAgent; providers that
-need a custom OpenAI-SDK transport can return one from build_http_client().
+Provider profiles are DECLARATIVE — they describe the provider's behavior.
+They do NOT own client construction, credential rotation, or streaming.
+Those stay on AIAgent.
 """
 
 from __future__ import annotations

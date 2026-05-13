@@ -6492,10 +6492,7 @@ class AIAgent:
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPCNT, 3))
             elif hasattr(_socket, "TCP_KEEPALIVE"):
                 _sock_opts.append((_socket.IPPROTO_TCP, _socket.TCP_KEEPALIVE, 30))
-            kwargs = {"socket_options": _sock_opts}
-            if proxy is not None:
-                kwargs["proxy"] = proxy
-            return _httpx.HTTPTransport(**kwargs)
+            return _httpx.HTTPTransport(socket_options=_sock_opts, proxy=proxy)
         except Exception:
             return None
 
@@ -6512,7 +6509,10 @@ class AIAgent:
             # Explicitly read proxy settings while still honoring NO_PROXY for
             # loopback / local endpoints such as a locally hosted sub2api.
             _proxy = _get_proxy_for_base_url(base_url)
-            return _httpx.Client(transport=transport, proxy=_proxy)
+            return _httpx.Client(
+                transport=transport,
+                proxy=_proxy,
+            )
         except Exception:
             return None
 

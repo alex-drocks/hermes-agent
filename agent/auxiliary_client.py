@@ -103,12 +103,8 @@ OpenAI = _OpenAIProxy()  # module-level name, resolves lazily on call/isinstance
 from agent.credential_pool import load_pool
 from hermes_cli.config import get_hermes_home
 from hermes_constants import OPENROUTER_BASE_URL
-from utils import (
-    base_url_host_matches,
-    base_url_hostname,
-    normalize_proxy_env_vars,
-    normalize_proxy_url,
-)
+from utils import base_url_host_matches, base_url_hostname, normalize_proxy_env_vars
+from utils import normalize_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +166,7 @@ def _build_keepalive_http_transport(proxy: Any = None) -> Any:
     try:
         import httpx
 
-        kwargs = {"socket_options": _keepalive_socket_options()}
-        if proxy is not None:
-            kwargs["proxy"] = proxy
-        return httpx.HTTPTransport(**kwargs)
+        return httpx.HTTPTransport(socket_options=_keepalive_socket_options(), proxy=proxy)
     except Exception:
         return None
 
@@ -182,10 +175,7 @@ def _build_keepalive_async_http_transport(proxy: Any = None) -> Any:
     try:
         import httpx
 
-        kwargs = {"socket_options": _keepalive_socket_options()}
-        if proxy is not None:
-            kwargs["proxy"] = proxy
-        return httpx.AsyncHTTPTransport(**kwargs)
+        return httpx.AsyncHTTPTransport(socket_options=_keepalive_socket_options(), proxy=proxy)
     except Exception:
         return None
 
